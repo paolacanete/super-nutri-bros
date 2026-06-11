@@ -26,7 +26,7 @@
   </div>
 </div>
 <script>
-"use strict";
+"use strict"; // v2: niveles más fáciles + gráficos mejorados
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 const W = cv.width, H = cv.height, TS = 40;
 
@@ -39,17 +39,17 @@ const LEVELS = [
   map:[
 "                                                                      ",
 "                                                                      ",
-"                   A                          N                       ",
-"                  ###                        ###                      ",
-"                            W                          A              ",
-"          A                ###          B             ###             ",
-"         ###                           ###                            ",
-"   N                 e                                      A        ",
-"  ###          ##########               e          J       ###       ",
-"                                      ######      ###                 ",
-"      A      B          e        A             e         N     A    F ",
-"######################################  ##############################",
-"######################################  ##############################",
+"                                                                      ",
+"                                                                      ",
+"            A                     N                   A               ",
+"           ###                  #####                ###              ",
+"                        W                                             ",
+"      A                ###               A      J         N           ",
+"     ###         B                      ###    ###       ###          ",
+"                ###                                                   ",
+"        A    B     e      A       N      e      A     B     A    F    ",
+"######################################################################",
+"######################################################################",
 ]},
 {
   name:"Nivel 2 · Montaña de Proteínas",
@@ -57,18 +57,18 @@ const LEVELS = [
   enemy:"gaseosa", intro:"Las proteínas construyen tus músculos. ¡A escalar!",
   map:[
 "                                                                      ",
-"                                                        A             ",
-"                                                       ###     N      ",
-"                                          B                   ###     ",
-"                              W          ###       e                  ",
-"                  N          ###      ########             A      F   ",
-"        A        ###                                      ###    ###  ",
-"       ###               e         J                                  ",
-"  B          ########################      A        e          A      ",
-" ###                                      ###    #######      ###     ",
-"     A      e        W       A                                        ",
-"#################  ##############  ###################################",
-"#################  ##############  ###################################",
+"                                                                      ",
+"                          A                                           ",
+"                         ###             N                            ",
+"               B                        ###          A                ",
+"              ###                                   ###               ",
+"        W              e                                              ",
+"       ###        ##########         A         B                      ",
+"                                    ###       ###        N            ",
+"                                                         ###          ",
+"   A     A     B      e     A    W      e     A      e      A    F    ",
+"######################################################################",
+"######################################################################",
 ]},
 {
   name:"Nivel 3 · Bosque de la Fibra",
@@ -76,18 +76,18 @@ const LEVELS = [
   enemy:"papas", intro:"La fibra ayuda a tu digestión. ¡Cruza el bosque!",
   map:[
 "                                                                      ",
-"                  A                      N                            ",
-"                 ###                    ###                           ",
-"                          B                        A                  ",
-"        N                ###          e           ###          A      ",
-"       ###          e            ##########                   ###     ",
-"               #######                                                ",
-"   A                        W              J         B            F   ",
-"  ###          A           ###            ###       ###          ###  ",
-"              ###                                                     ",
-"       J             e         A       e        N        e     A      ",
-"############  #####################  #################################",
-"############  #####################  #################################",
+"                                                                      ",
+"             A                                                        ",
+"            ###                  N                   A                ",
+"                                ###                 ###               ",
+"         B                                                            ",
+"        ###           e                                               ",
+"                 ########          A        W        B        N       ",
+"                                  ###      ###      ###      ###      ",
+"                                                                      ",
+"     A      e      A     B    e      A    J   N    e     A   A   F    ",
+"######################################################################",
+"######################################################################",
 ]},
 {
   name:"Nivel 4 · Castillo del Azúcar",
@@ -190,7 +190,7 @@ function loadLevel(i){
 }
 
 function mkEnemy(x, y){
-  return {x, y:y+6, w:32, h:32, vx:Math.random()<.5?-1.1:1.1, dead:false, kind:level.enemy};
+  return {x, y:y+6, w:32, h:32, vx:Math.random()<.5?-0.8:0.8, dead:false, kind:level.enemy};
 }
 
 function levelW(){ return level.map[0].length * TS; }
@@ -237,7 +237,7 @@ function update(){
   if (state !== "play") { if (state==="intro") introT++; return; }
 
   const speed = player.power.fuerza > 0 ? 4.6 : 3.6;
-  const jumpV = player.power.salto > 0 ? -15.5 : -11.5;
+  const jumpV = player.power.salto > 0 ? -17 : -14;
   const L = keys['ArrowLeft']||keys['KeyA'], R = keys['ArrowRight']||keys['KeyD'];
   const J = keys['ArrowUp']||keys['KeyW']||keys['Space'];
 
@@ -305,9 +305,9 @@ function update(){
     if (boss.x < camX+ TS || boss.x + boss.w > levelW()-TS) boss.vx *= -1;
     if (boss.hurt > 0) boss.hurt--;
     if (--boss.shootT <= 0){
-      boss.shootT = Math.max(60, 130 - levelIdx*10);
+      boss.shootT = 170;
       const dx = (player.x - boss.x) > 0 ? 1 : -1;
-      shots.push({x:boss.x+boss.w/2, y:boss.y+20, vx:dx*3.4, vy:-5, w:22, h:22});
+      shots.push({x:boss.x+boss.w/2, y:boss.y+20, vx:dx*2.6, vy:-5, w:22, h:22});
       beep(180,.15,"sawtooth",.05);
     }
     if (overlap(player, boss)){
@@ -354,11 +354,28 @@ function draw(){
   g.addColorStop(0, level.sky[0]); g.addColorStop(1, level.sky[1]);
   ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
 
-  // colinas parallax
-  ctx.fillStyle = level.hill; ctx.globalAlpha = .35;
+  // sol
+  ctx.save();
+  ctx.fillStyle = "rgba(255,253,220,.95)"; ctx.shadowColor="rgba(255,250,200,.9)"; ctx.shadowBlur=40;
+  ctx.beginPath(); ctx.arc(W-120, 95, 36, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  // nubes parallax
+  ctx.fillStyle = "rgba(255,255,255,.8)";
+  for (let i=0;i<5;i++){
+    const m = W+300;
+    const cxp = (((i*260 - camX*0.25) % m) + m) % m - 150;
+    drawCloud(cxp, 60 + (i%3)*48);
+  }
+  // colinas parallax (dos capas)
+  ctx.fillStyle = level.hill; ctx.globalAlpha = .22;
+  for (let i=0;i<7;i++){
+    const m = W+500, hx = (((i*300 - camX*0.18) % m) + m) % m - 250;
+    ctx.beginPath(); ctx.arc(hx+150, H, 210, Math.PI, 0); ctx.fill();
+  }
+  ctx.globalAlpha = .42;
   for (let i=0;i<6;i++){
-    const hx = ((i*340 - camX*0.4) % (W+400)) - 200;
-    ctx.beginPath(); ctx.arc(hx+170, H, 170, Math.PI, 0); ctx.fill();
+    const m = W+400, hx = (((i*340 - camX*0.4) % m) + m) % m - 200;
+    ctx.beginPath(); ctx.arc(hx+170, H, 140, Math.PI, 0); ctx.fill();
   }
   ctx.globalAlpha = 1;
 
@@ -369,44 +386,71 @@ function draw(){
   for (let r=0;r<tiles.length;r++) for (let c=c0;c<=c1;c++){
     if (tiles[r] && tiles[r][c]===1){
       const x=c*TS, y=r*TS;
+      const above = r>0 && (!tiles[r-1] || tiles[r-1][c]!==1);
       ctx.fillStyle = level.block; ctx.fillRect(x,y,TS,TS);
-      const above = r>0 && tiles[r-1][c]!==1;
-      if (above){ ctx.fillStyle = level.top; ctx.fillRect(x,y,TS,10); }
-      ctx.strokeStyle = "rgba(0,0,0,.15)"; ctx.strokeRect(x+.5,y+.5,TS-1,TS-1);
+      ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fillRect(x+2,y+2,TS-4,3);
+      ctx.fillStyle = "rgba(0,0,0,.14)"; ctx.fillRect(x,y+TS-5,TS,5);
+      if (above){
+        ctx.fillStyle = level.top; ctx.fillRect(x,y-3,TS,13);
+        ctx.beginPath();
+        ctx.arc(x+8,y+8,6,0,Math.PI*2); ctx.arc(x+21,y+7,7,0,Math.PI*2); ctx.arc(x+33,y+8,6,0,Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(x,y-3,TS,3);
+      }
+      ctx.strokeStyle = "rgba(0,0,0,.08)"; ctx.strokeRect(x+.5,y+.5,TS-1,TS-1);
     }
   }
 
   // bandera
   if (flag){
-    ctx.fillStyle="#888"; ctx.fillRect(flag.x+14, flag.y-80, 6, 120);
+    ctx.fillStyle="rgba(0,0,0,.2)";
+    ctx.beginPath(); ctx.ellipse(flag.x+17, flag.y+40, 16, 4, 0, 0, Math.PI*2); ctx.fill();
+    const grd = ctx.createLinearGradient(flag.x+14, 0, flag.x+20, 0);
+    grd.addColorStop(0,"#cfd8dc"); grd.addColorStop(1,"#78909c");
+    ctx.fillStyle=grd; ctx.fillRect(flag.x+14, flag.y-84, 6, 124);
+    ctx.fillStyle="#ffd54f"; ctx.beginPath(); ctx.arc(flag.x+17, flag.y-88, 6, 0, Math.PI*2); ctx.fill();
+    const wav = Math.sin(time/12)*5;
     ctx.fillStyle="#2e7d32";
-    ctx.beginPath(); ctx.moveTo(flag.x+20, flag.y-80); ctx.lineTo(flag.x+58, flag.y-66); ctx.lineTo(flag.x+20, flag.y-52); ctx.fill();
-    ctx.font="20px serif"; ctx.fillText("🥗", flag.x+26, flag.y-58);
+    ctx.beginPath(); ctx.moveTo(flag.x+20, flag.y-82);
+    ctx.quadraticCurveTo(flag.x+42, flag.y-76+wav, flag.x+60, flag.y-66+wav);
+    ctx.quadraticCurveTo(flag.x+42, flag.y-58+wav, flag.x+20, flag.y-50); ctx.fill();
+    ctx.font="18px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("🥗", flag.x+34, flag.y-66+wav*0.5);
+    ctx.textAlign="left"; ctx.textBaseline="top";
   }
 
   // objetos
-  ctx.font = "26px serif"; ctx.textBaseline="top";
+  ctx.textAlign="center"; ctx.textBaseline="middle";
   for (const it of items){
     if (it.got) continue;
     const bob = Math.sin((time+it.x)/15)*4;
+    const ix = it.x+20, iy = it.y+20+bob;
     const em = {apple:"🍎", broccoli:"🥦", water:"💧", banana:"🍌", junk:"🍔"}[it.type];
-    if (it.type!=='junk'){ ctx.save(); ctx.shadowColor="#fff"; ctx.shadowBlur=10; ctx.fillText(em, it.x+6, it.y+4+bob); ctx.restore(); }
-    else ctx.fillText(em, it.x+6, it.y+4+bob);
+    if (it.type!=='junk'){
+      ctx.fillStyle = "rgba(255,255,255,.4)";
+      ctx.beginPath(); ctx.arc(ix, iy, 18 + Math.sin(time/9)*2.5, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillStyle = "rgba(120,20,20,.25)";
+      ctx.beginPath(); ctx.arc(ix, iy, 18, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.font = "27px serif";
+    ctx.fillText(em, ix, iy+1);
   }
 
   // enemigos
   for (const en of enemies){
     if (en.dead) continue;
     const em = {dona:"🍩", gaseosa:"🥤", papas:"🍟"}[en.kind] || "🍩";
-    ctx.font = "30px serif";
-    ctx.fillText(em, en.x, en.y + Math.sin(time/8)*2);
-    // ojitos enojados
-    ctx.fillStyle="#000";
+    ctx.fillStyle = "rgba(0,0,0,.25)";
+    ctx.beginPath(); ctx.ellipse(en.x+16, en.y+en.h+4, 16, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.font = "32px serif";
+    ctx.fillText(em, en.x+16, en.y+16 + Math.sin(time/8)*2);
   }
 
   // proyectiles
   ctx.font = "22px serif";
-  for (const s of shots) ctx.fillText("🍬", s.x, s.y);
+  for (const s of shots) ctx.fillText("🍬", s.x+11, s.y+11);
+  ctx.textAlign="left"; ctx.textBaseline="top";
 
   // jefe
   if (boss && !boss.dead) drawBoss();
@@ -422,25 +466,58 @@ function draw(){
   if (state==="intro") drawIntro();
 }
 
+function drawCloud(x, y){
+  ctx.beginPath();
+  ctx.arc(x, y, 16, 0, Math.PI*2);
+  ctx.arc(x+20, y-10, 21, 0, Math.PI*2);
+  ctx.arc(x+44, y, 16, 0, Math.PI*2);
+  ctx.ellipse(x+22, y+7, 38, 13, 0, 0, Math.PI*2);
+  ctx.fill();
+}
+
 function drawPlayer(){
   if (player.inv > 0 && Math.floor(time/4)%2===0) return;
   const scale = 1 + Math.min(player.nutri*0.015, 0.3); // crece sano
   const w = player.w*scale, h = player.h*scale;
   const x = player.x + player.w/2 - w/2, y = player.y + player.h - h;
+  const cx = x + w/2;
+  // sombra
+  if (player.onGround){
+    ctx.fillStyle="rgba(0,0,0,.25)";
+    ctx.beginPath(); ctx.ellipse(cx, player.y+player.h+4, w*0.55, 5, 0, 0, Math.PI*2); ctx.fill();
+  }
+  const walk = (Math.abs(player.vx)>0.1 && player.onGround) ? Math.sin(time*0.45)*4 : 0;
+  // piernas
+  ctx.fillStyle = "#1565c0";
+  ctx.fillRect(cx-w*0.34, y+h*0.70, w*0.27, h*0.30 + walk*0.6);
+  ctx.fillRect(cx+w*0.07, y+h*0.70, w*0.27, h*0.30 - walk*0.6);
   // cuerpo
-  ctx.fillStyle = player.power.fuerza>0 ? "#2e7d32" : "#e53935";
-  ctx.fillRect(x, y+h*0.35, w, h*0.65);
+  const bodyCol = player.power.fuerza>0 ? "#2e7d32" : "#e53935";
+  ctx.fillStyle = bodyCol;
+  roundRect(x, y+h*0.32, w, h*0.46, 7); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.18)";
+  roundRect(x+2, y+h*0.34, w-4, h*0.12, 5); ctx.fill();
+  // brazos
+  ctx.fillStyle = bodyCol;
+  ctx.fillRect(x-5, y+h*0.36, 6, h*0.28 - walk*0.5);
+  ctx.fillRect(x+w-1, y+h*0.36, 6, h*0.28 + walk*0.5);
   // cabeza
-  ctx.fillStyle = "#ffcc80"; ctx.fillRect(x+w*0.1, y, w*0.8, h*0.4);
+  ctx.fillStyle = "#ffd9a0";
+  ctx.beginPath(); ctx.arc(cx, y+h*0.22, w*0.46, 0, Math.PI*2); ctx.fill();
   // gorra
   ctx.fillStyle = player.power.salto>0 ? "#29b6f6" : "#c62828";
-  ctx.fillRect(x, y-4, w, h*0.18);
-  ctx.fillRect(player.face>0 ? x+w*0.6 : x-w*0.25, y-4, w*0.65, 6);
+  ctx.beginPath(); ctx.arc(cx, y+h*0.20, w*0.48, Math.PI, 0); ctx.fill();
+  ctx.fillRect(cx + (player.face>0 ? 0 : -w*0.78), y+h*0.155, w*0.78, 5);
   // ojos
   ctx.fillStyle="#222";
-  const ex = player.face > 0 ? x+w*0.55 : x+w*0.25;
-  ctx.fillRect(ex, y+h*0.16, 4, 5);
-  ctx.fillRect(ex+(player.face>0?9:-9), y+h*0.16, 4, 5);
+  const ex = cx + player.face*w*0.12;
+  ctx.beginPath();
+  ctx.arc(ex-5, y+h*0.24, 2.5, 0, Math.PI*2);
+  ctx.arc(ex+5, y+h*0.24, 2.5, 0, Math.PI*2);
+  ctx.fill();
+  // sonrisa
+  ctx.strokeStyle="#a3552a"; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.arc(cx + player.face*3, y+h*0.28, 5, 0.25, Math.PI-0.25); ctx.stroke();
 }
 
 function drawBoss(){
