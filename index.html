@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Super Nutri Bros</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; background:#1a1a2e; overflow:hidden; font-family:'Segoe UI',system-ui,sans-serif; }
+  #wrap { display:flex; align-items:center; justify-content:center; height:100%; flex-direction:column; }
+  canvas { background:#000; max-width:100vw; max-height:88vh; image-rendering:pixelated; border-radius:8px; box-shadow:0 8px 40px rgba(0,0,0,.6); }
+  #touch { display:none; gap:14px; margin-top:10px; user-select:none; -webkit-user-select:none; }
+  .tbtn { width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,.15); color:#fff;
+          font-size:26px; display:flex; align-items:center; justify-content:center; border:2px solid rgba(255,255,255,.35); touch-action:none; }
+  @media (pointer:coarse) { #touch { display:flex; } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="960" height="540"></canvas>
+  <div id="touch">
+    <div class="tbtn" id="bl">◀</div>
+    <div class="tbtn" id="br">▶</div>
+    <div style="width:40px"></div>
+    <div class="tbtn" id="bj">⬆</div>
+  </div>
+</div>
+<script>
+"use strict";
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height, TS = 40;
+
+// ---------- Niveles ----------
+const LEVELS = [
+{
+  name:"Nivel 1 · Reino de las Vitaminas",
+  sky:["#ffd97a","#ffb55e"], hill:"#8bc34a", block:"#c97f2e", top:"#7fbf3f",
+  enemy:"dona", intro:"Las vitaminas protegen tu cuerpo. ¡Junta frutas y verduras!",
+  map:[
+"                                                                      ",
+"                                                                      ",
+"                   A                          N                       ",
+"                  ###                        ###                      ",
+"                            W                          A              ",
+"          A                ###          B             ###             ",
+"         ###                           ###                            ",
+"   N                 e                                      A        ",
+"  ###          ##########               e          J       ###       ",
+"                                      ######      ###                 ",
+"      A      B          e        A             e         N     A    F ",
+"######################################  ##############################",
+"######################################  ##############################",
+]},
+{
+  name:"Nivel 2 · Montaña de Proteínas",
+  sky:["#a8d8ff","#6fb3e8"], hill:"#90a4ae", block:"#607d8b", top:"#b0bec5",
+  enemy:"gaseosa", intro:"Las proteínas construyen tus músculos. ¡A escalar!",
+  map:[
+"                                                                      ",
+"                                                        A             ",
+"                                                       ###     N      ",
+"                                          B                   ###     ",
+"                              W          ###       e                  ",
+"                  N          ###      ########             A      F   ",
+"        A        ###                                      ###    ###  ",
+"       ###               e         J                                  ",
+"  B          ########################      A        e          A      ",
+" ###                                      ###    #######      ###     ",
+"     A      e        W       A                                        ",
+"#################  ##############  ###################################",
+"#################  ##############  ###################################",
+]},
+{
+  name:"Nivel 3 · Bosque de la Fibra",
+  sky:["#bff0c8","#7ed491"], hill:"#2e7d32", block:"#5d4037", top:"#388e3c",
+  enemy:"papas", intro:"La fibra ayuda a tu digestión. ¡Cruza el bosque!",
+  map:[
+"                                                                      ",
+"                  A                      N                            ",
+"                 ###                    ###                           ",
+"                          B                        A                  ",
+"        N                ###          e           ###          A      ",
+"       ###          e            ##########                   ###     ",
+"               #######                                                ",
+"   A                        W              J         B            F   ",
+"  ###          A           ###            ###       ###          ###  ",
+"              ###                                                     ",
+"       J             e         A       e        N        e     A      ",
+"############  #####################  #################################",
+"############  #####################  #################################",
+]},
+{
+  name:"Nivel 4 · Castillo del Azúcar",
+  sky:["#f8bbd0","#ce93d8"], hill:"#ad6bad", block:"#8e44ad", top:"#c66bc6",
+  enemy:"dona", boss:true, intro:"¡Cuidado! Aquí gobierna El UltraProcesador...",
+  map:[
+"                                                                      ",
+"                                                                      ",
+"                                                                      ",
+"            A                  W                   A                  ",
+"           ###                ###                 ###                 ",
+"                                                                      ",
+"                      B                  N                            ",
+"                     ###                ###                           ",
+"                                                                      ",
+"                                                                      ",
+"      A                                                  X            ",
+"######################################################################",
+"######################################################################",
+]},
+];
+
+// ---------- Mensajes educativos ----------
+const FACTS = {
+  apple:   ["+1 Vida ❤️  Manzana: vitaminas y fibra"],
+  broccoli:["💪 ¡Fuerza!  Brócoli: hierro y vitamina C"],
+  water:   ["💧 ¡Salto alto!  La hidratación mejora el rendimiento"],
+  banana:  ["⚡ +Potasio  Ayuda a los músculos"],
+  junk:    ["🍔 −Energía  Ultraprocesado: mucha azúcar y grasa",
+            "🍟 −Energía  El exceso de sal cansa tu cuerpo"],
+  stomp:   ["¡Bien! Menos chatarra, más energía real"],
+};
+
+// ---------- Estado ----------
+let state = "title"; // title | intro | play | gameover | win
+let levelIdx = 0, level = null, tiles = [], items = [], enemies = [], shots = [], parts = [];
+let camX = 0, toast = null, toastT = 0, introT = 0, score = 0, time = 0;
+let boss = null, flag = null;
+
+const player = {
+  x:0, y:0, vx:0, vy:0, w:26, h:34, onGround:false, face:1,
+  hearts:3, maxHearts:5, energy:100, nutri:0,
+  power:{ fuerza:0, salto:0 }, inv:0, dead:false,
+};
+
+// ---------- Entrada ----------
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (["ArrowUp","ArrowDown","Space"].includes(e.code)) e.preventDefault();
+  if (state==="title" || state==="intro") { if (e.code==="Space"||e.code==="Enter") advance(); }
+  if ((state==="gameover"||state==="win") && (e.code==="KeyR"||e.code==="Space"||e.code==="Enter")) reset();
+});
+addEventListener('keyup', e => keys[e.code] = false);
+cv.addEventListener('pointerdown', () => { if (state!=="play") (state==="gameover"||state==="win") ? reset() : advance(); });
+
+function bindTouch(id, code){
+  const el = document.getElementById(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); keys[code]=true; if(state!=="play"&&code==="ArrowUp") advance(); });
+  el.addEventListener('pointerup',   e => { e.preventDefault(); keys[code]=false; });
+  el.addEventListener('pointerleave',() => keys[code]=false);
+}
+bindTouch('bl','ArrowLeft'); bindTouch('br','ArrowRight'); bindTouch('bj','ArrowUp');
+
+// ---------- Audio ----------
+let AC = null;
+function beep(f, d=0.08, type="square", vol=0.04){
+  try {
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.value = f; g.gain.value = vol;
+    g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + d);
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + d);
+  } catch(e){}
+}
+
+// ---------- Carga de nivel ----------
+function loadLevel(i){
+  level = LEVELS[i];
+  tiles = []; items = []; enemies = []; shots = []; parts = []; boss = null; flag = null;
+  const map = level.map;
+  for (let r=0; r<map.length; r++){
+    tiles[r] = [];
+    for (let c=0; c<map[r].length; c++){
+      const ch = map[r][c], x = c*TS, y = r*TS;
+      tiles[r][c] = (ch === '#') ? 1 : 0;
+      if (ch==='A') items.push({type:'apple', x, y});
+      if (ch==='B') items.push({type:'broccoli', x, y});
+      if (ch==='W') items.push({type:'water', x, y});
+      if (ch==='N') items.push({type:'banana', x, y});
+      if (ch==='J') items.push({type:'junk', x, y});
+      if (ch==='e') enemies.push(mkEnemy(x, y));
+      if (ch==='F') flag = {x, y};
+      if (ch==='X') boss = {x, y:y-40, w:80, h:80, hp:3, vx:1.4, hurt:0, shootT:120, dead:false};
+    }
+  }
+  player.x = 40; player.y = 9*TS; player.vx = 0; player.vy = 0;
+  player.power.fuerza = 0; player.power.salto = 0; player.inv = 0;
+  camX = 0;
+}
+
+function mkEnemy(x, y){
+  return {x, y:y+6, w:32, h:32, vx:Math.random()<.5?-1.1:1.1, dead:false, kind:level.enemy};
+}
+
+function levelW(){ return level.map[0].length * TS; }
+function solid(px, py){
+  const c = Math.floor(px/TS), r = Math.floor(py/TS);
+  if (r < 0 || c < 0) return false;
+  if (r >= tiles.length) return false;
+  return tiles[r][c] === 1;
+}
+
+// ---------- Flujo ----------
+function advance(){
+  beep(520, .1);
+  if (state==="title"){ levelIdx=0; score=0; player.hearts=3; player.energy=100; player.nutri=0; state="intro"; introT=0; loadLevel(0); }
+  else if (state==="intro"){ state="play"; }
+}
+function reset(){ state = "title"; }
+function nextLevel(){
+  levelIdx++;
+  if (levelIdx >= LEVELS.length){ state = "win"; return; }
+  loadLevel(levelIdx); state = "intro"; introT = 0;
+}
+function showToast(msgs){
+  toast = msgs[Math.floor(Math.random()*msgs.length)]; toastT = 130;
+}
+function burst(x, y, col, n=10){
+  for (let k=0;k<n;k++) parts.push({x,y,vx:(Math.random()-.5)*5,vy:(Math.random()-.8)*5,t:30,col});
+}
+
+// ---------- Daño ----------
+function hurt(n){
+  if (player.inv > 0) return;
+  player.hearts -= n; player.inv = 80; beep(140,.25,"sawtooth",.06);
+  if (player.hearts <= 0) state = "gameover";
+}
+function loseEnergy(n){
+  player.energy -= n;
+  if (player.energy <= 0){ player.energy = 60; hurt(1); }
+}
+
+// ---------- Update ----------
+function update(){
+  time++;
+  if (state !== "play") { if (state==="intro") introT++; return; }
+
+  const speed = player.power.fuerza > 0 ? 4.6 : 3.6;
+  const jumpV = player.power.salto > 0 ? -15.5 : -11.5;
+  const L = keys['ArrowLeft']||keys['KeyA'], R = keys['ArrowRight']||keys['KeyD'];
+  const J = keys['ArrowUp']||keys['KeyW']||keys['Space'];
+
+  player.vx = (R?speed:0) - (L?speed:0);
+  if (player.vx) player.face = Math.sign(player.vx);
+  if (J && player.onGround){ player.vy = jumpV; player.onGround = false; beep(660,.1,"square",.03); }
+  player.vy = Math.min(player.vy + 0.55, 14);
+
+  // colisión horizontal
+  player.x += player.vx;
+  if (player.vx > 0 && (solid(player.x+player.w, player.y+2)||solid(player.x+player.w, player.y+player.h-2))) player.x = Math.floor((player.x+player.w)/TS)*TS - player.w - 0.01;
+  if (player.vx < 0 && (solid(player.x, player.y+2)||solid(player.x, player.y+player.h-2))) player.x = (Math.floor(player.x/TS)+1)*TS + 0.01;
+  player.x = Math.max(0, Math.min(player.x, levelW()-player.w));
+
+  // colisión vertical
+  player.y += player.vy;
+  player.onGround = false;
+  if (player.vy > 0 && (solid(player.x+3, player.y+player.h)||solid(player.x+player.w-3, player.y+player.h))){
+    player.y = Math.floor((player.y+player.h)/TS)*TS - player.h - 0.01; player.vy = 0; player.onGround = true;
+  }
+  if (player.vy < 0 && (solid(player.x+3, player.y)||solid(player.x+player.w-3, player.y))){
+    player.y = (Math.floor(player.y/TS)+1)*TS + 0.01; player.vy = 0;
+  }
+
+  // caída al vacío
+  if (player.y > H + 80){
+    hurt(1);
+    if (state==="play"){ player.x = Math.max(40, camX+40); player.y = 0; player.vy = 0; }
+  }
+
+  if (player.inv > 0) player.inv--;
+  if (player.power.fuerza > 0) player.power.fuerza--;
+  if (player.power.salto > 0) player.power.salto--;
+  if (time % 90 === 0) player.energy = Math.min(100, player.energy + 1);
+
+  // objetos
+  for (const it of items){
+    if (it.got) continue;
+    if (overlap(player, {x:it.x+6, y:it.y+6, w:28, h:28})){
+      it.got = true;
+      if (it.type==='apple'){ player.hearts = Math.min(player.maxHearts, player.hearts+1); player.nutri++; score+=100; showToast(FACTS.apple); beep(880,.12,"sine",.05); burst(it.x+20,it.y+20,"#e53935"); }
+      if (it.type==='broccoli'){ player.power.fuerza = 600; player.nutri++; score+=150; showToast(FACTS.broccoli); beep(760,.12,"sine",.05); burst(it.x+20,it.y+20,"#43a047"); }
+      if (it.type==='water'){ player.power.salto = 600; player.energy=Math.min(100,player.energy+20); score+=150; showToast(FACTS.water); beep(980,.12,"sine",.05); burst(it.x+20,it.y+20,"#29b6f6"); }
+      if (it.type==='banana'){ player.energy = Math.min(100, player.energy+30); player.nutri++; score+=100; showToast(FACTS.banana); beep(820,.12,"sine",.05); burst(it.x+20,it.y+20,"#fdd835"); }
+      if (it.type==='junk'){ loseEnergy(30); score=Math.max(0,score-50); showToast(FACTS.junk); burst(it.x+20,it.y+20,"#8d6e63"); }
+    }
+  }
+
+  // enemigos
+  for (const en of enemies){
+    if (en.dead) continue;
+    en.x += en.vx;
+    const ahead = en.vx > 0 ? en.x+en.w+2 : en.x-2;
+    if (solid(ahead, en.y+en.h/2) || !solid(ahead, en.y+en.h+4)) en.vx *= -1;
+    if (overlap(player, en)){
+      if (player.power.fuerza > 0 || (player.vy > 0 && player.y + player.h < en.y + en.h*0.6)){
+        en.dead = true; score += 200; player.vy = -8; showToast(FACTS.stomp); beep(440,.1); burst(en.x+16,en.y+16,"#fff", 14);
+      } else { hurt(1); loseEnergy(10); player.vx = 0; player.vy = -6; }
+    }
+  }
+
+  // jefe
+  if (boss && !boss.dead){
+    boss.x += boss.vx;
+    if (boss.x < camX+ TS || boss.x + boss.w > levelW()-TS) boss.vx *= -1;
+    if (boss.hurt > 0) boss.hurt--;
+    if (--boss.shootT <= 0){
+      boss.shootT = Math.max(60, 130 - levelIdx*10);
+      const dx = (player.x - boss.x) > 0 ? 1 : -1;
+      shots.push({x:boss.x+boss.w/2, y:boss.y+20, vx:dx*3.4, vy:-5, w:22, h:22});
+      beep(180,.15,"sawtooth",.05);
+    }
+    if (overlap(player, boss)){
+      if (player.vy > 0 && player.y + player.h < boss.y + boss.h*0.5 && boss.hurt===0){
+        boss.hp--; boss.hurt = 60; player.vy = -11; score += 500; beep(300,.2,"square",.06);
+        burst(boss.x+40, boss.y+20, "#fff", 20);
+        showToast(["¡Golpe al UltraProcesador! 🥗 La comida real gana"]);
+        if (boss.hp <= 0){ boss.dead = true; score += 2000; }
+      } else if (boss.hurt===0){ hurt(1); player.vy=-7; player.x += (player.x<boss.x?-30:30); }
+    }
+  }
+  // proyectiles
+  for (const s of shots){
+    s.x += s.vx; s.vy += 0.25; s.y += s.vy;
+    if (solid(s.x+11, s.y+22)) { s.vy = -4; }
+    if (overlap(player, s)){ s.gone = true; hurt(1); loseEnergy(15); }
+  }
+  shots = shots.filter(s => !s.gone && s.y < H+100 && Math.abs(s.x-player.x) < 1400);
+
+  // partículas
+  for (const p of parts){ p.x+=p.vx; p.y+=p.vy; p.vy+=.2; p.t--; }
+  parts = parts.filter(p => p.t > 0);
+
+  // meta
+  if (flag && overlap(player, {x:flag.x, y:flag.y-80, w:30, h:120})){ score += 300; beep(700,.3,"sine",.06); nextLevel(); }
+  if (boss && boss.dead && level.boss){ if (!boss.winT) boss.winT = 90; if (--boss.winT <= 0) nextLevel(); }
+
+  // cámara
+  camX = Math.max(0, Math.min(player.x - W/2 + 60, levelW() - W));
+
+  if (toastT > 0) toastT--;
+}
+
+function overlap(a, b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+
+// ---------- Dibujo ----------
+function draw(){
+  if (state==="title") return drawTitle();
+  if (state==="gameover") return drawEnd("💔 ¡Fin del juego!", "Comer mal te quitó la energía...", "#b71c1c");
+  if (state==="win") return drawEnd("🏆 ¡VICTORIA!", "Venciste al UltraProcesador comiendo sano", "#1b5e20");
+
+  // cielo
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, level.sky[0]); g.addColorStop(1, level.sky[1]);
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  // colinas parallax
+  ctx.fillStyle = level.hill; ctx.globalAlpha = .35;
+  for (let i=0;i<6;i++){
+    const hx = ((i*340 - camX*0.4) % (W+400)) - 200;
+    ctx.beginPath(); ctx.arc(hx+170, H, 170, Math.PI, 0); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.save(); ctx.translate(-Math.floor(camX), 0);
+
+  // bloques
+  const c0 = Math.floor(camX/TS), c1 = c0 + Math.ceil(W/TS) + 1;
+  for (let r=0;r<tiles.length;r++) for (let c=c0;c<=c1;c++){
+    if (tiles[r] && tiles[r][c]===1){
+      const x=c*TS, y=r*TS;
+      ctx.fillStyle = level.block; ctx.fillRect(x,y,TS,TS);
+      const above = r>0 && tiles[r-1][c]!==1;
+      if (above){ ctx.fillStyle = level.top; ctx.fillRect(x,y,TS,10); }
+      ctx.strokeStyle = "rgba(0,0,0,.15)"; ctx.strokeRect(x+.5,y+.5,TS-1,TS-1);
+    }
+  }
+
+  // bandera
+  if (flag){
+    ctx.fillStyle="#888"; ctx.fillRect(flag.x+14, flag.y-80, 6, 120);
+    ctx.fillStyle="#2e7d32";
+    ctx.beginPath(); ctx.moveTo(flag.x+20, flag.y-80); ctx.lineTo(flag.x+58, flag.y-66); ctx.lineTo(flag.x+20, flag.y-52); ctx.fill();
+    ctx.font="20px serif"; ctx.fillText("🥗", flag.x+26, flag.y-58);
+  }
+
+  // objetos
+  ctx.font = "26px serif"; ctx.textBaseline="top";
+  for (const it of items){
+    if (it.got) continue;
+    const bob = Math.sin((time+it.x)/15)*4;
+    const em = {apple:"🍎", broccoli:"🥦", water:"💧", banana:"🍌", junk:"🍔"}[it.type];
+    if (it.type!=='junk'){ ctx.save(); ctx.shadowColor="#fff"; ctx.shadowBlur=10; ctx.fillText(em, it.x+6, it.y+4+bob); ctx.restore(); }
+    else ctx.fillText(em, it.x+6, it.y+4+bob);
+  }
+
+  // enemigos
+  for (const en of enemies){
+    if (en.dead) continue;
+    const em = {dona:"🍩", gaseosa:"🥤", papas:"🍟"}[en.kind] || "🍩";
+    ctx.font = "30px serif";
+    ctx.fillText(em, en.x, en.y + Math.sin(time/8)*2);
+    // ojitos enojados
+    ctx.fillStyle="#000";
+  }
+
+  // proyectiles
+  ctx.font = "22px serif";
+  for (const s of shots) ctx.fillText("🍬", s.x, s.y);
+
+  // jefe
+  if (boss && !boss.dead) drawBoss();
+
+  // partículas
+  for (const p of parts){ ctx.globalAlpha = p.t/30; ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, 5, 5); }
+  ctx.globalAlpha = 1;
+
+  drawPlayer();
+  ctx.restore();
+
+  drawHUD();
+  if (state==="intro") drawIntro();
+}
+
+function drawPlayer(){
+  if (player.inv > 0 && Math.floor(time/4)%2===0) return;
+  const scale = 1 + Math.min(player.nutri*0.015, 0.3); // crece sano
+  const w = player.w*scale, h = player.h*scale;
+  const x = player.x + player.w/2 - w/2, y = player.y + player.h - h;
+  // cuerpo
+  ctx.fillStyle = player.power.fuerza>0 ? "#2e7d32" : "#e53935";
+  ctx.fillRect(x, y+h*0.35, w, h*0.65);
+  // cabeza
+  ctx.fillStyle = "#ffcc80"; ctx.fillRect(x+w*0.1, y, w*0.8, h*0.4);
+  // gorra
+  ctx.fillStyle = player.power.salto>0 ? "#29b6f6" : "#c62828";
+  ctx.fillRect(x, y-4, w, h*0.18);
+  ctx.fillRect(player.face>0 ? x+w*0.6 : x-w*0.25, y-4, w*0.65, 6);
+  // ojos
+  ctx.fillStyle="#222";
+  const ex = player.face > 0 ? x+w*0.55 : x+w*0.25;
+  ctx.fillRect(ex, y+h*0.16, 4, 5);
+  ctx.fillRect(ex+(player.face>0?9:-9), y+h*0.16, 4, 5);
+}
+
+function drawBoss(){
+  const b = boss;
+  if (b.hurt > 0 && Math.floor(time/4)%2===0) return;
+  // máquina ultraprocesadora
+  ctx.fillStyle = "#455a64"; ctx.fillRect(b.x, b.y, b.w, b.h);
+  ctx.fillStyle = "#37474f"; ctx.fillRect(b.x-8, b.y+b.h-18, b.w+16, 18);
+  ctx.fillStyle = "#ff5252"; ctx.fillRect(b.x+10, b.y+14, 16, 12); // ojo
+  ctx.fillRect(b.x+b.w-26, b.y+14, 16, 12);
+  ctx.fillStyle = "#000"; ctx.fillRect(b.x+14, b.y+18, 6, 6); ctx.fillRect(b.x+b.w-22, b.y+18, 6, 6);
+  ctx.fillStyle = "#263238"; ctx.fillRect(b.x+14, b.y+46, b.w-28, 14); // boca ranura
+  ctx.font = "16px serif"; ctx.fillText("🍔🍬🍟", b.x+14, b.y+44);
+  // chimenea
+  ctx.fillStyle="#546e7a"; ctx.fillRect(b.x+b.w/2-8, b.y-16, 16, 16);
+  // vida del jefe
+  ctx.fillStyle="rgba(0,0,0,.5)"; ctx.fillRect(b.x, b.y-30, b.w, 8);
+  ctx.fillStyle="#ff5252"; ctx.fillRect(b.x, b.y-30, b.w*(b.hp/3), 8);
+  ctx.fillStyle="#fff"; ctx.font="bold 11px sans-serif"; ctx.fillText("EL ULTRAPROCESADOR", b.x-12, b.y-44);
+}
+
+function drawHUD(){
+  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(0,0,W,46);
+  // corazones
+  ctx.font = "20px serif"; ctx.textBaseline="top";
+  for (let i=0;i<player.maxHearts;i++) ctx.fillText(i<player.hearts ? "❤️" : "🖤", 12+i*26, 12);
+  // energía
+  ctx.fillStyle="#fff"; ctx.font="bold 12px sans-serif"; ctx.fillText("ENERGÍA", 160, 6);
+  ctx.fillStyle="rgba(255,255,255,.25)"; ctx.fillRect(160, 22, 140, 12);
+  ctx.fillStyle = player.energy>40 ? "#66bb6a" : "#ef5350"; ctx.fillRect(160, 22, 140*player.energy/100, 12);
+  // poderes
+  let px = 320;
+  if (player.power.fuerza>0){ ctx.font="18px serif"; ctx.fillText("🥦", px, 12); ctx.fillStyle="#fff"; ctx.font="11px sans-serif"; ctx.fillText(Math.ceil(player.power.fuerza/60)+"s", px+24, 17); px+=60; }
+  if (player.power.salto>0){ ctx.font="18px serif"; ctx.fillText("💧", px, 12); ctx.fillStyle="#fff"; ctx.font="11px sans-serif"; ctx.fillText(Math.ceil(player.power.salto/60)+"s", px+24, 17); }
+  // nivel y puntos
+  ctx.fillStyle="#fff"; ctx.font="bold 14px sans-serif"; ctx.textAlign="right";
+  ctx.fillText(level.name, W-12, 6);
+  ctx.fillText("NutriPuntos: " + score, W-12, 24);
+  ctx.textAlign="left";
+
+  // toast educativo
+  if (toastT > 0 && toast){
+    const a = Math.min(1, toastT/25);
+    ctx.globalAlpha = a;
+    ctx.font = "bold 17px sans-serif";
+    const tw = ctx.measureText(toast).width + 36;
+    ctx.fillStyle = "rgba(20,30,20,.85)";
+    roundRect((W-tw)/2, H-72, tw, 38, 10); ctx.fill();
+    ctx.fillStyle = "#d8f5d0"; ctx.textAlign="center";
+    ctx.fillText(toast, W/2, H-61);
+    ctx.textAlign="left"; ctx.globalAlpha = 1;
+  }
+}
+
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+function drawTitle(){
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#43cea2"); g.addColorStop(1,"#185a9d");
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="top";
+  ctx.font="64px serif"; ctx.fillText("🍎🥦💧", W/2, 60);
+  ctx.fillStyle="#fff"; ctx.font="bold 58px sans-serif";
+  ctx.fillText("SUPER NUTRI BROS", W/2, 160);
+  ctx.font="20px sans-serif"; ctx.fillStyle="#d9ffe8";
+  ctx.fillText("Crece sano comiendo bien · evita la chatarra", W/2, 235);
+  ctx.font="16px sans-serif"; ctx.fillStyle="#fff";
+  ctx.fillText("← → o A/D para moverte  ·  ↑ / W / Espacio para saltar", W/2, 300);
+  ctx.fillText("🍎 vida   🥦 fuerza   💧 salto alto   🍌 energía   🍔 ¡evítala!", W/2, 330);
+  if (Math.floor(time/30)%2===0){ ctx.font="bold 24px sans-serif"; ctx.fillStyle="#ffeb3b"; ctx.fillText("— Pulsa ESPACIO o toca para jugar —", W/2, 420); }
+  ctx.textAlign="left";
+}
+
+function drawIntro(){
+  ctx.fillStyle="rgba(0,0,0,.65)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.fillStyle="#fff";
+  ctx.font="bold 40px sans-serif"; ctx.fillText(level.name, W/2, H/2-70);
+  ctx.font="20px sans-serif"; ctx.fillStyle="#c8e6c9"; ctx.fillText(level.intro, W/2, H/2-10);
+  if (level.boss){ ctx.font="26px sans-serif"; ctx.fillStyle="#ff8a80"; ctx.fillText("⚠ JEFE FINAL: salta sobre su cabeza 3 veces", W/2, H/2+40); }
+  if (Math.floor(time/30)%2===0){ ctx.font="18px sans-serif"; ctx.fillStyle="#ffeb3b"; ctx.fillText("Pulsa ESPACIO para empezar", W/2, H/2+100); }
+  ctx.textAlign="left";
+}
+
+function drawEnd(title, sub, col){
+  ctx.fillStyle=col; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.fillStyle="#fff";
+  ctx.font="bold 52px sans-serif"; ctx.fillText(title, W/2, H/2-90);
+  ctx.font="22px sans-serif"; ctx.fillText(sub, W/2, H/2-20);
+  ctx.font="bold 26px sans-serif"; ctx.fillStyle="#ffeb3b"; ctx.fillText("NutriPuntos: " + score, W/2, H/2+30);
+  if (state==="win"){ ctx.font="18px sans-serif"; ctx.fillStyle="#c8e6c9"; ctx.fillText("Aprendiste: vitaminas, proteínas, fibra e hidratación 💚", W/2, H/2+75); }
+  if (Math.floor(time/30)%2===0){ ctx.font="20px sans-serif"; ctx.fillStyle="#fff"; ctx.fillText("Pulsa R o toca para volver a jugar", W/2, H/2+130); }
+  ctx.textAlign="left";
+}
+
+// ---------- Bucle ----------
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
